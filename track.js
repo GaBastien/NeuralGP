@@ -50,17 +50,17 @@
 
     sortByAngle(dataset, hull) {
         /**
-         * Fonction qui retourne une liste de candidat trié par le candidat faisant le virage le plus à droite
+         * Fonction qui retourne une liste de candidat trié par le candidat faisant le virage le plus à droite (angle "tournant à droite" le plus bas)
          * Inspiré par la loi des cosinus https://www.maxicours.com/se/cours/trigonometrie-appliquee-aux-triangles-quelconques/
          */
         const idx = hull.length;
-        let distHullSide = distanceBetweenTwoPoints(hull[idx-1], hull[idx-2]); // distBetweenLast2HullPoints
+        let distHullSide = distanceBetweenTwoPoints(hull[idx-1], hull[idx-2]); // distance entre les deux derniers points du hull
 
         dataset.sort( function(a, b) {
-            let OppositeSideA = distanceBetweenTwoPoints(hull[idx-2], a);
+            let OppositeSideA = distanceBetweenTwoPoints(hull[idx-2], a); // côté opposé à l'angle calculé
             let distA = distanceBetweenTwoPoints(hull[idx-1], a); // distance entre le dernier point du hull et le candidat
-            let angleA;
-            if (whichTurnSide(hull[idx-2], hull[idx-1], a) < 0) {
+            let angleA; // angle correspondant au "tournant à droite" entre la dernière droite du hull et la droite défini par le dernier point du hull et le point a
+            if (whichTurnSide(hull[idx-2], hull[idx-1], a) < 0) { // si tournant à gauche on enlève 2*PI pour continuer de calculer l'angle "tournant à droite"
                 angleA = 2*Math.PI - Math.acos((Math.pow(distA,2) + Math.pow(distHullSide,2)  - Math.pow(OppositeSideA,2)) /  (2*distA*distHullSide));
             } else {
                 angleA = Math.acos((Math.pow(distA,2) + Math.pow(distHullSide,2)  - Math.pow(OppositeSideA,2)) /  (2*distA*distHullSide));
@@ -98,7 +98,12 @@
     // https://repositorium.sdum.uminho.pt/bitstream/1822/6429/1/ConcaveHull_ACM_MYS.pdf
     createConcavHull(k) {
         console.log("Create hull with", k, "neighbours");
+        // variables
+        let currentPoint;
         let dataset = this.points;
+        let nearestNeighbours; // les k plus proches voisins du currentPoint
+        let neighboursSorted; // k plus proches voisins triés par ordre décroissant d'angle (virage à droite)
+        let intersec; // booléen qui gère l'intersection entre le candidat et les bords du polygone
 
         // calcul du pivot : point le plus bas et le plus à gauche possible
         let pivotPoint = this.points[0];
@@ -112,49 +117,49 @@
         this.hull.push(pivotPoint);
         dataset = dataset.filter(point => point.id != pivotPoint.id);
 
+        // ajout d'un deuxième point
+        nearestNeighbours = this.nearestPoint(dataset, pivotPoint, k);
+        console.log("nearest neighbours for pivot point :", nearestNeighbours);
+
         // trié en fonction de l'angle que chacun d'entre eux fait avec l'axe des abscisses relativement au pivot
         // https://developer.mozilla.org/fr/docs/Web/JavaScript/Reference/Global_Objects/Math/atan2
-        this.points.sort( function(a, b) {
+        nearestNeighbours.sort( function(a, b) {
             let angleA = Math.atan2(pivotPoint.pos.y - a.pos.y, a.pos.x - pivotPoint.pos.x);
             let angleB = Math.atan2(pivotPoint.pos.y - b.pos.y, b.pos.x - pivotPoint.pos.x);
             return angleA == angleB ? 0 : angleA > angleB ? 1 : -1;
         });
 
-        this.hull.push(this.points[1]);
-        dataset = dataset.filter(point => point.id !=  this.points[1].id);
+        this.hull.push(nearestNeighbours[0]);
+        dataset = dataset.filter(point => point.id !=  nearestNeighbours[0].id);
+        currentPoint = nearestNeighbours[0];
 
-        // variable
-        let currentPoint = this.points[1]; // point courant
-        let nearestNeighbours = null; // les k plus proches voisins du currentPoint
-        let neighboursSorted = null; // k plus proches voisins triés par ordre décroissant d'angle (virage à droite)
-        let intersec = null; // boolean qui gère l'intersection entre le candidat et les bords du polygone
-
-        while (currentPoint != pivotPoint && dataset.length > 0) {
+        while (currentPoint.id != pivotPoint.id && dataset.length > 0) {
             if (this.hull.length == 5) dataset.push(pivotPoint); // ajout du premier point
 
             nearestNeighbours = this.nearestPoint(dataset, currentPoint, k);
             neighboursSorted = this.sortByAngle(nearestNeighbours, this.hull);
 
-            console.log("Sorted", k, "neighbours for the point id :", currentPoint.id)
-            console.log(neighboursSorted)
+            console.log("Sorted", k, "neighbours for the point id :", currentPoint.id, neighboursSorted)
 
             let i = -1;
             intersec = true;
             // selection du premier candidat qui n'intersecte aucun des bords du polygone 
-            while (intersec == true && i < neighboursSorted.length) {
+            while (intersec == true && i < neighboursSorted.length-1) {
                 i++;
-                intersec = this.checkIntersectionWithHull(this.hull, neighboursSorted[0]);
+                intersec = this.checkIntersectionWithHull(this.hull, neighboursSorted[i]);
             }
             if (intersec == true) { // puisque tous les candidats croisent au moins un bord, réessayez avec un nombre plus élevé de voisins
                 this.hull = [];
-                console.log("lul")
+                console.log("Intersection between two lines trying with", k+1, "neighbours")
                 return this.createConcavHull(k+1);
             }
 
             // on a trouvé le bon candidat
-            this.hull.push(neighboursSorted[i]);
             currentPoint = neighboursSorted[i];
-            dataset = dataset.filter(point => point.id != neighboursSorted[i].id);
+            if (currentPoint.id != pivotPoint.id) { // on ne rajoute pas le point de pivot dans le hull (déjà présent)
+                this.hull.push(neighboursSorted[i]);
+                dataset = dataset.filter(point => point.id != neighboursSorted[i].id);
+            }
         }
 
         console.log(this.hull);
