@@ -4,7 +4,7 @@ let terrain;
 let ms;
 
 function setup() {
-	createCanvas(800, 800);
+	createCanvas(1200, 900);
 	this.terrain = new Track();
 	this.ms = millis();
 }
@@ -12,7 +12,7 @@ function setup() {
 function draw() {
 	background(100);
 	this.terrain.show();
-	if (millis() - this.ms > 3000) {
+	if (millis() - this.ms > 10000) {
 		this.terrain.generatingPoints();
 		this.ms = millis();
 	}

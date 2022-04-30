@@ -9,6 +9,7 @@
         circle(this.pos.x, this.pos.y, 20);
         const idText = this.id.toString();
         fill("red");
+        textSize(16)
         text(
             idText,
             this.pos.x - textWidth(idText) / 2,
