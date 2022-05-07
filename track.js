@@ -6,17 +6,17 @@
 
     generatingPoints() {
         this.points = [];
-        this.hull = [];
         for (let i = 0; i < this.nbOfPoints; i++) {
             this.points.push(new HullPoint(i));
         }
 
-        this.createConcavHull(2);
+        this.hull = this.createConcavHull(2, [], this.points);
+        this.bezierHull = this.getBezierInterpolation(this.hull, 10);
     }
 
     show() {
         // show hull
-        if (this.hull.length > 2) {
+        /*if (this.hull.length > 2) {
             for(let i=1; i < this.hull.length; i++) {
                 line(this.hull[i-1].pos.x, this.hull[i-1].pos.y, this.hull[i].pos.x, this.hull[i].pos.y);
             }
@@ -24,6 +24,16 @@
         }
         for (const p of this.points) {
             p.show();
+        }*/
+
+        for (const p of this.hull) {
+            p.show();
+        }
+        if (this.bezierHull.length > 2) {
+            for (let i=1; i < this.bezierHull.length; i++) {
+                line(this.bezierHull[i-1].pos.x, this.bezierHull[i-1].pos.y, this.bezierHull[i].pos.x, this.bezierHull[i].pos.y);
+            }
+            line(this.bezierHull[this.bezierHull.length-1].pos.x, this.bezierHull[this.bezierHull.length-1].pos.y, this.bezierHull[0].pos.x, this.bezierHull[0].pos.y);
         }
     }
 
@@ -96,30 +106,28 @@
     }
 
     // https://repositorium.sdum.uminho.pt/bitstream/1822/6429/1/ConcaveHull_ACM_MYS.pdf
-    createConcavHull(k) {
-        console.log("Create hull with", k, "neighbours");
+    createConcavHull(k, hull, points) {
         // variables
         let currentPoint;
-        let dataset = this.points;
+        let dataset = points;
         let nearestNeighbours; // les k plus proches voisins du currentPoint
         let neighboursSorted; // k plus proches voisins triés par ordre décroissant d'angle (virage à droite)
         let intersec; // booléen qui gère l'intersection entre le candidat et les bords du polygone
 
         // calcul du pivot : point le plus bas et le plus à gauche possible
-        let pivotPoint = this.points[0];
-        for (let i in this.points) {
-            if( this.points[i].pos.y > pivotPoint.pos.y ) {
-                pivotPoint = this.points[i];
+        let pivotPoint = points[0];
+        for (let i in points) {
+            if( points[i].pos.y > pivotPoint.pos.y ) {
+                pivotPoint = points[i];
             }
         }
 
         // init du hull et on enlève le premier point des candidats
-        this.hull.push(pivotPoint);
+        hull.push(pivotPoint);
         dataset = dataset.filter(point => point.id != pivotPoint.id);
 
         // ajout d'un deuxième point
         nearestNeighbours = this.nearestPoint(dataset, pivotPoint, k);
-        console.log("nearest neighbours for pivot point :", nearestNeighbours);
 
         // trié en fonction de l'angle que chacun d'entre eux fait avec l'axe des abscisses relativement au pivot
         // https://developer.mozilla.org/fr/docs/Web/JavaScript/Reference/Global_Objects/Math/atan2
@@ -129,39 +137,69 @@
             return angleA == angleB ? 0 : angleA > angleB ? 1 : -1;
         });
 
-        this.hull.push(nearestNeighbours[0]);
+        hull.push(nearestNeighbours[0]);
         dataset = dataset.filter(point => point.id !=  nearestNeighbours[0].id);
         currentPoint = nearestNeighbours[0];
 
         while (currentPoint.id != pivotPoint.id && dataset.length > 0) {
-            if (this.hull.length == 5) dataset.push(pivotPoint); // ajout du premier point
+            if (hull.length == 5) dataset.push(pivotPoint); // ajout du premier point
 
             nearestNeighbours = this.nearestPoint(dataset, currentPoint, k);
-            neighboursSorted = this.sortByAngle(nearestNeighbours, this.hull);
-
-            console.log("Sorted", k, "neighbours for the point id :", currentPoint.id, neighboursSorted)
+            neighboursSorted = this.sortByAngle(nearestNeighbours, hull);
 
             let i = -1;
             intersec = true;
             // selection du premier candidat qui n'intersecte aucun des bords du polygone 
             while (intersec == true && i < neighboursSorted.length-1) {
                 i++;
-                intersec = this.checkIntersectionWithHull(this.hull, neighboursSorted[i]);
+                intersec = this.checkIntersectionWithHull(hull, neighboursSorted[i]);
             }
             if (intersec == true) { // puisque tous les candidats croisent au moins un bord, réessayez avec un nombre plus élevé de voisins
-                this.hull = [];
-                console.log("Intersection between two lines trying with", k+1, "neighbours")
-                return this.createConcavHull(k+1);
+                return this.createConcavHull(k+1, [], this.points);
             }
-
+            
             // on a trouvé le bon candidat
             currentPoint = neighboursSorted[i];
             if (currentPoint.id != pivotPoint.id) { // on ne rajoute pas le point de pivot dans le hull (déjà présent)
-                this.hull.push(neighboursSorted[i]);
+                hull.push(neighboursSorted[i]);
                 dataset = dataset.filter(point => point.id != neighboursSorted[i].id);
             }
         }
 
-        console.log(this.hull);
+        // règle de gestion : si 40% des points ne sont pas dans le hull, la proposition n'est pas intéressante
+        if ((hull.length / points.length) < 0.4) {
+            return this.createConcavHull(k+1, [], this.points);
+        }
+        return hull;
+    }
+
+    bezierPoint(a,b,c,d,t) {
+        return a*Math.pow((1-t),3) + 3*b*t*Math.pow((1-t),2) + 3*c*t*t*(1-t) + d*Math.pow(t,3);
+    }
+
+    // https://my.numworks.com/python/schraf/valentin
+    // https://www.youtube.com/watch?v=2pNjW-2944Y
+    getBezierInterpolation(hull, weigh) {
+        /**
+         * Fonction qui retourne un polygone créée par la formule de Bézier pour ajouter plus de points à ce polygone afin de rendre les courbes plus lisses
+         */
+        let curveHull = [];
+
+        for (let i = 0; i < hull.length-3; i = i+4) {
+            const a = hull[i];
+            const b = hull[i+1];
+            const c = hull[i+2];
+            const d = hull[i+3];
+
+            for (let t = 0; t < 1; t+=1/weigh) {
+                let curvPoint = new HullPoint(-1);
+                curvPoint.pos.x = this.bezierPoint(a.pos.x, b.pos.x, c.pos.x, d.pos.x, t);
+                curvPoint.pos.y = this.bezierPoint(a.pos.y, b.pos.y, c.pos.y, d.pos.y, t);
+
+                curveHull.push(curvPoint);
+            }
+        }
+        
+        return curveHull;
     }
 }
