@@ -11,6 +11,8 @@
         }
 
         this.hull = this.createConcavHull(2, [], this.points);
+        console.log("Hull length :", this.hull.length);
+        console.log(this.hull);
         this.bezierHull = this.getBezierInterpolation(this.hull, 10);
     }
 
@@ -173,28 +175,34 @@
         return hull;
     }
 
-    bezierPoint(a,b,c,d,t) {
+    bezierPointCubic(a,b,c,d,t) {
         return a*Math.pow((1-t),3) + 3*b*t*Math.pow((1-t),2) + 3*c*t*t*(1-t) + d*Math.pow(t,3);
+    }
+
+    bezierQuadratic(a,b,c,t) {
+        return a*Math.pow((1-t),2) + 2*b*t*(1-t) + c*t*t;
     }
 
     // https://my.numworks.com/python/schraf/valentin
     // https://www.youtube.com/watch?v=2pNjW-2944Y
+
+    // http://www.sens-neuchatel.ch/bulletin/no34/art3-34.pdf
+    // https://www.youtube.com/watch?v=pnYccz1Ha34
     getBezierInterpolation(hull, weigh) {
         /**
          * Fonction qui retourne un polygone créée par la formule de Bézier pour ajouter plus de points à ce polygone afin de rendre les courbes plus lisses
          */
         let curveHull = [];
 
-        for (let i = 0; i < hull.length-3; i = i+4) {
+        for (let i = 0; i < hull.length-2; i = i+2) {
             const a = hull[i];
             const b = hull[i+1];
             const c = hull[i+2];
-            const d = hull[i+3];
 
             for (let t = 0; t < 1; t+=1/weigh) {
                 let curvPoint = new HullPoint(-1);
-                curvPoint.pos.x = this.bezierPoint(a.pos.x, b.pos.x, c.pos.x, d.pos.x, t);
-                curvPoint.pos.y = this.bezierPoint(a.pos.y, b.pos.y, c.pos.y, d.pos.y, t);
+                curvPoint.pos.x = this.bezierQuadratic(a.pos.x, b.pos.x, c.pos.x, t);
+                curvPoint.pos.y = this.bezierQuadratic(a.pos.y, b.pos.y, c.pos.y, t);
 
                 curveHull.push(curvPoint);
             }
