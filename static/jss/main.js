@@ -10,9 +10,9 @@ function setup() {
 }
 
 function draw() {
-	background(100);
+	background(120);
 	this.terrain.show();
-	if (millis() - this.ms > 10000) {
+	if (millis() - this.ms > 100000) {
 		this.terrain.generatingPoints();
 		this.ms = millis();
 	}
